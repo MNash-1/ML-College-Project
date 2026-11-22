@@ -1156,6 +1156,170 @@ def render_underwriting_portal(pipeline):
                 st.error(f"Prediction execution error: {e}")
 
 
+def render_eda_analytics():
+    """Confidential EDA and Model Analytics tab (visible in Internal Underwriter Mode)."""
+    st.markdown("### 📊 Model Evaluation & Benchmarks")
+    
+    # Metrics Table Display
+    metrics_file = os.path.join("screenshots", "metrics_summary.txt")
+    if os.path.exists(metrics_file):
+        with open(metrics_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        st.code(content, language="text")
+    else:
+        st.warning("`screenshots/metrics_summary.txt` not found. Please run `python train.py`.")
+
+    st.divider()
+
+    # Confusion Matrix
+    st.markdown("#### 🎯 Confusion Matrix on Held-Out Test Set (20% Stratified)")
+    cm_path = os.path.join("screenshots", "5_confusion_matrix.png")
+    if os.path.exists(cm_path):
+        st.image(cm_path, caption="Confusion Matrix of Winning Model (Gradient Boosting)", width=600)
+
+    st.divider()
+
+    # FEATURE 5A: DATA BALANCE & OUTLIER CHECKS
+    st.markdown("### ⚖️ Dataset Class Balance & Outlier Analysis")
+    st.caption("Auditing training dataset distribution to ensure balance and identify statistical anomalies:")
+
+    bal_col1, bal_col2, bal_col3 = st.columns(3)
+    with bal_col1:
+        st.metric("Total Records", "4,269 Applicants", "Kaggle Loan Dataset")
+    with bal_col2:
+        st.metric("Target Balance", "62.2% Approved", "37.8% Rejected (Mild Imbalance)")
+    with bal_col3:
+        st.metric("Demographics Split", "50.2% Graduate", "50.5% Salaried / 49.5% Self-Employed")
+
+    p_outliers = os.path.join("screenshots", "7_outliers_balance.png")
+    if os.path.exists(p_outliers):
+        st.image(p_outliers, caption="Class Distribution & Feature Outlier Spread (IQR Method)", use_container_width=True)
+
+    st.markdown("##### 🔍 Interquartile Range (IQR) Outlier Detection Report")
+    outlier_data = [
+        {"Feature": "Annual Income (income_annum)", "Min": "₹2.00 Lakh", "Q1 (25%)": "₹27.00 Lakh", "Median": "₹51.00 Lakh", "Q3 (75%)": "₹75.00 Lakh", "Max": "₹99.00 Lakh", "IQR": "₹48.00 Lakh", "Outlier Count": 0, "Outlier %": "0.00%"},
+        {"Feature": "Loan Amount (loan_amount)", "Min": "₹3.00 Lakh", "Q1 (25%)": "₹77.00 Lakh", "Median": "₹1.45 Cr", "Q3 (75%)": "₹2.15 Cr", "Max": "₹3.95 Cr", "IQR": "₹1.38 Cr", "Outlier Count": 0, "Outlier %": "0.00%"},
+        {"Feature": "CIBIL Score (cibil_score)", "Min": "300", "Q1 (25%)": "453", "Median": "600", "Q3 (75%)": "748", "Max": "900", "IQR": "295", "Outlier Count": 0, "Outlier %": "0.00%"},
+        {"Feature": "Residential Property (residential_assets_value)", "Min": "-₹1.00 Lakh", "Q1 (25%)": "₹22.00 Lakh", "Median": "₹56.00 Lakh", "Q3 (75%)": "₹1.13 Cr", "Max": "₹2.91 Cr", "IQR": "₹91.00 Lakh", "Outlier Count": 52, "Outlier %": "1.22%"},
+        {"Feature": "Commercial Property (commercial_assets_value)", "Min": "₹0.00", "Q1 (25%)": "₹13.00 Lakh", "Median": "₹37.00 Lakh", "Q3 (75%)": "₹76.00 Lakh", "Max": "₹1.94 Cr", "IQR": "₹63.00 Lakh", "Outlier Count": 37, "Outlier %": "0.87%"},
+        {"Feature": "Bank Asset Value (bank_asset_value)", "Min": "₹0.00", "Q1 (25%)": "₹23.00 Lakh", "Median": "₹46.00 Lakh", "Q3 (75%)": "₹71.00 Lakh", "Max": "₹1.47 Cr", "IQR": "₹48.00 Lakh", "Outlier Count": 5, "Outlier %": "0.12%"}
+    ]
+    st.dataframe(pd.DataFrame(outlier_data), use_container_width=True, hide_index=True)
+    st.caption("📌 **Underwriter Finding**: Residential Assets feature contains 52 statistical anomalies (1.22%) including a negative minimum entry (-₹1 Lakh), cleanly handled by tree threshold splits. Income and loan amounts are uniformly distributed with zero outliers.")
+
+    st.divider()
+
+    # FEATURE 5B: PROBABILITY CALIBRATION CHECKS
+    st.markdown("### 🎯 Probability Calibration & Reliability Assessment")
+    st.caption("Evaluating whether predicted model probabilities match true empirical default frequencies:")
+
+    cal_c1, cal_c2 = st.columns([1.4, 1])
+
+    with cal_c1:
+        p_calibration = os.path.join("screenshots", "6_calibration_curve.png")
+        if os.path.exists(p_calibration):
+            st.image(p_calibration, caption="Reliability Diagram (Calibration Curve) & Probability Histogram", use_container_width=True)
+
+    with cal_c2:
+        with st.container(border=True):
+            st.markdown("**Probability Calibration Metrics**")
+            st.markdown("""
+            | Candidate Model | Brier Score Loss | Calibration Behavior |
+            | :--- | :---: | :--- |
+            | **Gradient Boosting** | **0.0000** | Sharp Step (Deterministic) |
+            | **Random Forest** | 0.0012 | High Confidence |
+            | **Logistic Regression** | 0.0634 | Smooth Sigmoidal |
+            """)
+
+            st.markdown("""
+            **Why Calibration Matters in Credit Underwriting**:
+            - A well-calibrated model ensures a predicted $P(\\text{Approval}) = 80\\%$ genuinely corresponds to an $80\\%$ empirical repayment probability.
+            - In regulatory credit systems (Basel III / IRB), calibrated probabilities are mandatory to compute **Expected Loss (EL)**:
+              $$\\text{Expected Loss} = \\text{PD} \\times \\text{EAD} \\times \\text{LGD}$$
+            - **Gradient Boosting Diagnosis**: The tree ensemble produces sharp probability separation near $0.0$ and $1.0$. Because the dataset exhibits clear boundaries around CIBIL ($<600$ vs $\\ge 600$), the tree ensemble demonstrates low uncertainty.
+            """)
+
+    st.divider()
+
+    # 4 Standard EDA Charts Grid
+    st.markdown("### 📈 Exploratory Data Analysis & Feature Dynamics")
+    eda_c1, eda_c2 = st.columns(2)
+
+    with eda_c1:
+        with st.container(border=True):
+            st.markdown("**1. Target Distribution (Loan Status)**")
+            p1 = os.path.join("screenshots", "1_target_distribution.png")
+            if os.path.exists(p1):
+                st.image(p1, caption="Balanced class distribution between Approved and Rejected applications.", use_container_width=True)
+            st.caption("The dataset contains balanced class representation, avoiding artificial class imbalance distortion.")
+
+        with eda_c1:
+            with st.container(border=True):
+                st.markdown("**3. Annual Income vs Loan Amount**")
+                p3 = os.path.join("screenshots", "3_income_vs_loan.png")
+                if os.path.exists(p3):
+                    st.image(p3, caption="Scatter distribution of requested loan vs applicant income.", use_container_width=True)
+                st.caption("Loan sanctions are tightly bounded by annual applicant income.")
+
+    with eda_c2:
+        with st.container(border=True):
+            st.markdown("**2. CIBIL Score vs Loan Status**")
+            p2 = os.path.join("screenshots", "2_cibil_vs_status.png")
+            if os.path.exists(p2):
+                st.image(p2, caption="Boxplot demonstrating strong separation around 550-600 CIBIL.", use_container_width=True)
+            st.caption("CIBIL score is the single strongest discriminator between approved and rejected loans.")
+
+        with eda_c2:
+            with st.container(border=True):
+                st.markdown("**4. Feature Correlation Heatmap**")
+                p4 = os.path.join("screenshots", "4_correlation_heatmap.png")
+                if os.path.exists(p4):
+                    st.image(p4, caption="Pearson correlation heatmap across all numerical predictors.", use_container_width=True)
+                st.caption("Reveals strong collinearity between income and loan amount, and across asset categories.")
+
+
+def render_architecture():
+    """Confidential Architecture & Specifications tab (visible in Internal Underwriter Mode)."""
+    with st.container(border=True):
+        st.markdown("### 🏗️ ML Pipeline Architecture & Design Specifications")
+        st.markdown("""
+        ```text
+        Raw Input (JSON / Dict / DataFrame)
+                   │
+                   ▼
+        ┌────────────────────────────────────────────────────────┐
+        │ LoanFeatureEngineer (features.py)                      │
+        │ • Total Assets = Residential + Commercial + Lux + Bank │
+        │ • Loan-to-Income (LTI) = loan_amount / income_annum    │
+        │ • Loan-to-Asset (LTA)  = loan_amount / total_assets    │
+        │   ↳ Zero Division Safeguard: np.where(total_assets>0)  │
+        └────────────────────────────────────────────────────────┘
+                   │
+                   ▼
+        ┌────────────────────────────────────────────────────────┐
+        │ ColumnTransformer                                      │
+        │ • StandardScaler: 12 numeric features                  │
+        │ • OneHotEncoder: education & self_employed             │
+        └────────────────────────────────────────────────────────┘
+                   │
+                   ▼
+        ┌────────────────────────────────────────────────────────┐
+        │ GradientBoostingClassifier (models/loan_pipeline.joblib│
+        │ • Tree Ensemble: 150 Estimators, Max Depth = 5         │
+        │ • Outputs: Binary Decision & Calibrated Risk Score     │
+        └────────────────────────────────────────────────────────┘
+        ```
+
+        #### 🔒 Production Stability, Prudence & Model Explainability
+        - **Core vs Secondary Collateral**: Primary effective collateral is restricted to tangible real estate (residential, commercial) and liquid bank deposits. Luxury and moveable assets are excluded from core collateral under prudent risk appraisal.
+        - **Debt Servicing (FOIR)**: Includes both new loan installment and existing debt obligations evaluated on verified Gross Monthly Income.
+        - **Leverage Metrics**: Evaluates LTV (Loan-to-Value) alongside LTI and Eff-LTA against regulatory limits.
+        - **SHAP Decision Attribution**: Local tree path decompositions converted into accessible plain-language credit drivers for underwriters.
+        - **Sensitivity What-If Analysis**: Immediate optimization scenario modeling for tenure and principal adjustments.
+        - **Reliability & Calibration**: Model probability calibration audited via reliability diagrams and Brier score loss.
+        """)
+
+
 def main():
     # Hero Banner
     st.markdown("""
@@ -1171,183 +1335,53 @@ def main():
 
     pipeline = load_pipeline()
 
-    tabs = st.tabs([
-        "🎯 Loan Underwriting Portal",
-        "📊 EDA & Model Analytics",
-        "ℹ️ System Architecture"
-    ])
-
-    # ==========================================
-    # TAB 1: LOAN UNDERWRITING PORTAL (FRAGMENT)
-    # ==========================================
-    with tabs[0]:
-        render_underwriting_portal(pipeline)
-
-    # ==========================================
-    # TAB 2: EDA & MODEL ANALYTICS
-    # ==========================================
-    with tabs[1]:
-        st.markdown("### 📊 Model Evaluation & Benchmarks")
+    # Internal Access Control (Sidebar)
+    with st.sidebar:
+        st.markdown("### 🔐 Internal Underwriter Mode")
+        st.caption("Access confidential EDA distribution charts, model calibration metrics, and pipeline architecture.")
         
-        # Metrics Table Display
-        metrics_file = os.path.join("screenshots", "metrics_summary.txt")
-        if os.path.exists(metrics_file):
-            with open(metrics_file, "r", encoding="utf-8") as f:
-                content = f.read()
-            st.code(content, language="text")
+        url_admin = st.query_params.get("admin", "false").lower() in ["true", "1", "yes"]
+        if "show_internal_tabs" not in st.session_state:
+            st.session_state["show_internal_tabs"] = url_admin
+
+        passkey = st.text_input(
+            "Underwriter Passkey",
+            type="password",
+            placeholder="Enter passkey to reveal...",
+            help="Default passkey is 'admin' or use ?admin=true in URL."
+        )
+
+        if passkey == "admin" or url_admin:
+            st.session_state["show_internal_tabs"] = True
+
+        if st.session_state["show_internal_tabs"]:
+            st.success("✅ Internal Tabs: Unlocked")
+            if st.button("🔒 Lock & Hide Internal Tabs", use_container_width=True):
+                st.session_state["show_internal_tabs"] = False
+                st.query_params.clear()
+                st.rerun()
         else:
-            st.warning("`screenshots/metrics_summary.txt` not found. Please run `python train.py`.")
+            if passkey and passkey != "admin":
+                st.error("Incorrect passkey")
+            st.info("🔒 EDA Analytics & Architecture tabs are hidden from public view.")
 
-        st.divider()
+    show_internal = st.session_state.get("show_internal_tabs", False)
 
-        # Confusion Matrix
-        st.markdown("#### 🎯 Confusion Matrix on Held-Out Test Set (20% Stratified)")
-        cm_path = os.path.join("screenshots", "5_confusion_matrix.png")
-        if os.path.exists(cm_path):
-            st.image(cm_path, caption="Confusion Matrix of Winning Model (Gradient Boosting)", width=600)
-
-        st.divider()
-
-        # FEATURE 5A: DATA BALANCE & OUTLIER CHECKS
-        st.markdown("### ⚖️ Dataset Class Balance & Outlier Analysis")
-        st.caption("Auditing training dataset distribution to ensure balance and identify statistical anomalies:")
-
-        bal_col1, bal_col2, bal_col3 = st.columns(3)
-        with bal_col1:
-            st.metric("Total Records", "4,269 Applicants", "Kaggle Loan Dataset")
-        with bal_col2:
-            st.metric("Target Balance", "62.2% Approved", "37.8% Rejected (Mild Imbalance)")
-        with bal_col3:
-            st.metric("Demographics Split", "50.2% Graduate", "50.5% Salaried / 49.5% Self-Employed")
-
-        p_outliers = os.path.join("screenshots", "7_outliers_balance.png")
-        if os.path.exists(p_outliers):
-            st.image(p_outliers, caption="Class Distribution & Feature Outlier Spread (IQR Method)", use_container_width=True)
-
-        st.markdown("##### 🔍 Interquartile Range (IQR) Outlier Detection Report")
-        outlier_data = [
-            {"Feature": "Annual Income (income_annum)", "Min": "₹2.00 Lakh", "Q1 (25%)": "₹27.00 Lakh", "Median": "₹51.00 Lakh", "Q3 (75%)": "₹75.00 Lakh", "Max": "₹99.00 Lakh", "IQR": "₹48.00 Lakh", "Outlier Count": 0, "Outlier %": "0.00%"},
-            {"Feature": "Loan Amount (loan_amount)", "Min": "₹3.00 Lakh", "Q1 (25%)": "₹77.00 Lakh", "Median": "₹1.45 Cr", "Q3 (75%)": "₹2.15 Cr", "Max": "₹3.95 Cr", "IQR": "₹1.38 Cr", "Outlier Count": 0, "Outlier %": "0.00%"},
-            {"Feature": "CIBIL Score (cibil_score)", "Min": "300", "Q1 (25%)": "453", "Median": "600", "Q3 (75%)": "748", "Max": "900", "IQR": "295", "Outlier Count": 0, "Outlier %": "0.00%"},
-            {"Feature": "Residential Property (residential_assets_value)", "Min": "-₹1.00 Lakh", "Q1 (25%)": "₹22.00 Lakh", "Median": "₹56.00 Lakh", "Q3 (75%)": "₹1.13 Cr", "Max": "₹2.91 Cr", "IQR": "₹91.00 Lakh", "Outlier Count": 52, "Outlier %": "1.22%"},
-            {"Feature": "Commercial Property (commercial_assets_value)", "Min": "₹0.00", "Q1 (25%)": "₹13.00 Lakh", "Median": "₹37.00 Lakh", "Q3 (75%)": "₹76.00 Lakh", "Max": "₹1.94 Cr", "IQR": "₹63.00 Lakh", "Outlier Count": 37, "Outlier %": "0.87%"},
-            {"Feature": "Bank Asset Value (bank_asset_value)", "Min": "₹0.00", "Q1 (25%)": "₹23.00 Lakh", "Median": "₹46.00 Lakh", "Q3 (75%)": "₹71.00 Lakh", "Max": "₹1.47 Cr", "IQR": "₹48.00 Lakh", "Outlier Count": 5, "Outlier %": "0.12%"}
-        ]
-        st.dataframe(pd.DataFrame(outlier_data), use_container_width=True, hide_index=True)
-        st.caption("📌 **Underwriter Finding**: Residential Assets feature contains 52 statistical anomalies (1.22%) including a negative minimum entry (-₹1 Lakh), cleanly handled by tree threshold splits. Income and loan amounts are uniformly distributed with zero outliers.")
-
-        st.divider()
-
-        # FEATURE 5B: PROBABILITY CALIBRATION CHECKS
-        st.markdown("### 🎯 Probability Calibration & Reliability Assessment")
-        st.caption("Evaluating whether predicted model probabilities match true empirical default frequencies:")
-
-        cal_c1, cal_c2 = st.columns([1.4, 1])
-
-        with cal_c1:
-            p_calibration = os.path.join("screenshots", "6_calibration_curve.png")
-            if os.path.exists(p_calibration):
-                st.image(p_calibration, caption="Reliability Diagram (Calibration Curve) & Probability Histogram", use_container_width=True)
-
-        with cal_c2:
-            with st.container(border=True):
-                st.markdown("**Probability Calibration Metrics**")
-                st.markdown("""
-                | Candidate Model | Brier Score Loss | Calibration Behavior |
-                | :--- | :---: | :--- |
-                | **Gradient Boosting** | **0.0000** | Sharp Step (Deterministic) |
-                | **Random Forest** | 0.0012 | High Confidence |
-                | **Logistic Regression** | 0.0634 | Smooth Sigmoidal |
-                """)
-
-                st.markdown("""
-                **Why Calibration Matters in Credit Underwriting**:
-                - A well-calibrated model ensures a predicted $P(\\text{Approval}) = 80\\%$ genuinely corresponds to an $80\\%$ empirical repayment probability.
-                - In regulatory credit systems (Basel III / IRB), calibrated probabilities are mandatory to compute **Expected Loss (EL)**:
-                  $$\\text{Expected Loss} = \\text{PD} \\times \\text{EAD} \\times \\text{LGD}$$
-                - **Gradient Boosting Diagnosis**: The tree ensemble produces sharp probability separation near $0.0$ and $1.0$. Because the dataset exhibits clear boundaries around CIBIL ($<600$ vs $\\ge 600$), the tree ensemble demonstrates low uncertainty.
-                """)
-
-        st.divider()
-
-        # 4 Standard EDA Charts Grid
-        st.markdown("### 📈 Exploratory Data Analysis & Feature Dynamics")
-        eda_c1, eda_c2 = st.columns(2)
-
-        with eda_c1:
-            with st.container(border=True):
-                st.markdown("**1. Target Distribution (Loan Status)**")
-                p1 = os.path.join("screenshots", "1_target_distribution.png")
-                if os.path.exists(p1):
-                    st.image(p1, caption="Balanced class distribution between Approved and Rejected applications.", use_container_width=True)
-                st.caption("The dataset contains balanced class representation, avoiding artificial class imbalance distortion.")
-
-            with eda_c1:
-                with st.container(border=True):
-                    st.markdown("**3. Annual Income vs Loan Amount**")
-                    p3 = os.path.join("screenshots", "3_income_vs_loan.png")
-                    if os.path.exists(p3):
-                        st.image(p3, caption="Scatter distribution of requested loan vs applicant income.", use_container_width=True)
-                    st.caption("Loan sanctions are tightly bounded by annual applicant income.")
-
-        with eda_c2:
-            with st.container(border=True):
-                st.markdown("**2. CIBIL Score vs Loan Status**")
-                p2 = os.path.join("screenshots", "2_cibil_vs_status.png")
-                if os.path.exists(p2):
-                    st.image(p2, caption="Boxplot demonstrating strong separation around 550-600 CIBIL.", use_container_width=True)
-                st.caption("CIBIL score is the single strongest discriminator between approved and rejected loans.")
-
-            with eda_c2:
-                with st.container(border=True):
-                    st.markdown("**4. Feature Correlation Heatmap**")
-                    p4 = os.path.join("screenshots", "4_correlation_heatmap.png")
-                    if os.path.exists(p4):
-                        st.image(p4, caption="Pearson correlation heatmap across all numerical predictors.", use_container_width=True)
-                    st.caption("Reveals strong collinearity between income and loan amount, and across asset categories.")
-
-    # ==========================================
-    # TAB 3: SYSTEM ARCHITECTURE
-    # ==========================================
-    with tabs[2]:
-        with st.container(border=True):
-            st.markdown("### 🏗️ ML Pipeline Architecture & Design Specifications")
-            st.markdown("""
-            ```text
-            Raw Input (JSON / Dict / DataFrame)
-                       │
-                       ▼
-            ┌────────────────────────────────────────────────────────┐
-            │ LoanFeatureEngineer (features.py)                      │
-            │ • Total Assets = Residential + Commercial + Lux + Bank │
-            │ • Loan-to-Income (LTI) = loan_amount / income_annum    │
-            │ • Loan-to-Asset (LTA)  = loan_amount / total_assets    │
-            │   ↳ Zero Division Safeguard: np.where(total_assets>0)  │
-            └────────────────────────────────────────────────────────┘
-                       │
-                       ▼
-            ┌────────────────────────────────────────────────────────┐
-            │ ColumnTransformer                                      │
-            │ • StandardScaler: 12 numeric features                  │
-            │ • OneHotEncoder: education & self_employed             │
-            └────────────────────────────────────────────────────────┘
-                       │
-                       ▼
-            ┌────────────────────────────────────────────────────────┐
-            │ GradientBoostingClassifier (models/loan_pipeline.joblib│
-            │ • Tree Ensemble: 150 Estimators, Max Depth = 5         │
-            │ • Outputs: Binary Decision & Calibrated Risk Score     │
-            └────────────────────────────────────────────────────────┘
-            ```
-
-            #### 🔒 Production Stability, Prudence & Model Explainability
-            - **Core vs Secondary Collateral**: Primary effective collateral is restricted to tangible real estate (residential, commercial) and liquid bank deposits. Luxury and moveable assets are excluded from core collateral under prudent risk appraisal.
-            - **Debt Servicing (FOIR)**: Includes both new loan installment and existing debt obligations evaluated on verified Gross Monthly Income.
-            - **Leverage Metrics**: Evaluates LTV (Loan-to-Value) alongside LTI and Eff-LTA against regulatory limits.
-            - **SHAP Decision Attribution**: Local tree path decompositions converted into accessible plain-language credit drivers for underwriters.
-            - **Sensitivity What-If Analysis**: Immediate optimization scenario modeling for tenure and principal adjustments.
-            - **Reliability & Calibration**: Model probability calibration audited via reliability diagrams and Brier score loss.
-            """)
+    if show_internal:
+        tabs = st.tabs([
+            "🎯 Loan Underwriting Portal",
+            "📊 EDA & Model Analytics (Internal)",
+            "ℹ️ System Architecture (Internal)"
+        ])
+        with tabs[0]:
+            render_underwriting_portal(pipeline)
+        with tabs[1]:
+            render_eda_analytics()
+        with tabs[2]:
+            render_architecture()
+    else:
+        # Standard Public View: Only the Loan Underwriting Portal is rendered
+        render_underwriting_portal(pipeline)
 
 
 if __name__ == '__main__':
