@@ -1000,9 +1000,9 @@ def render_underwriting_portal(pipeline):
                 bars = ax.barh(y_indices, plot_vals, color=plot_colors, height=0.52, edgecolor='none')
                 ax.axvline(0, color='#64748B', linestyle='--', linewidth=0.9, alpha=0.8)
                 ax.set_yticks(y_indices)
-                ax.set_yticklabels(plot_names, fontsize=10, fontweight='600', color='#0F172A')
+                ax.set_yticklabels(plot_names, fontsize=10, fontweight='bold', color='#0F172A')
                 ax.set_xlabel('SHAP Decision Contribution Score (Green = Pushes Approval | Red = Pushes Rejection)',
-                              fontsize=9, fontweight='600', color='#475569', labelpad=8)
+                              fontsize=9, fontweight='bold', color='#475569', labelpad=8)
                 ax.grid(axis='x', linestyle=':', alpha=0.5)
 
                 for bar, val in zip(bars, plot_vals):
